@@ -93,6 +93,7 @@ export function getDevtoolsUrl(page: Page): string {
 
 export const launchArgs: Parameters<typeof puppeteer.launch>[0] = {
   headless: true,
+  executablePath: '/usr/bin/chromium-browser',
   args: [
     '--disable-web-security', // For accessing iframes
     '--disable-features=IsolateOrigins,site-per-process', // For accessing iframes
