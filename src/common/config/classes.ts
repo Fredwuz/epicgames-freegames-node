@@ -87,7 +87,7 @@ export class TelegramConfig extends NotifierConfig {
    * @env TELEGRAM_TOKEN
    */
   @IsString()
-  @Matches(/[0-9]{9}:[a-zA-Z0-9_-]{35}/)
+  @Matches(/[0-9]+:[a-zA-Z0-9_-]{35}/)
   token: string;
 
   /**
@@ -558,6 +558,16 @@ export class AppConfig {
   @IsOptional()
   @IsBoolean()
   skipVersionCheck = process.env.SKIP_VERSION_CHECK?.toLowerCase() === 'true' || false;
+
+  /**
+   * Disable the ability to notify you when something goes wrong during browser automation
+   * @example true
+   * @default false
+   * @env NO_HUMAN_ERROR_HELP
+   */
+  @IsOptional()
+  @IsBoolean()
+  noHumanErrorHelp = process.env.NO_HUMAN_ERROR_HELP?.toLowerCase() === 'true' || false;
 
   /**
    * Deprecated, use {@link AppConfig.notifiers|`notifiers` with `"type": "email"`}

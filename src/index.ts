@@ -9,6 +9,7 @@ import Purchase from './purchase';
 import { newCookieJar } from './common/request';
 import PuppetPurchase from './puppet/purchase';
 import { testNotifiers } from './notify';
+import { checkForUpdate, logVersionOnError } from './version';
 
 export async function redeemAccount(account: AccountConfig, index: number): Promise<void> {
   const waitTime = index * config.intervalTime * 1000;
@@ -28,7 +29,11 @@ export async function redeemAccount(account: AccountConfig, index: number): Prom
       let { puppeteerPurchase } = config;
       try {
         if (!puppeteerPurchase) {
-          await purchase.purchase(offers[i].offerNamespace, offers[i].offerId);
+          await purchase.purchase(
+            offers[i].offerNamespace,
+            offers[i].offerId,
+            offers[i].productName
+          );
         }
       } catch (err) {
         L.warn(err);
@@ -46,11 +51,13 @@ export async function redeemAccount(account: AccountConfig, index: number): Prom
       else L.error(e.response);
     }
     L.error(e);
+    logVersionOnError();
   }
 }
 
 export async function main(): Promise<void> {
   if (process.env.NODE_ENV !== 'test') {
+    await checkForUpdate();
     if (config.testNotifiers) {
       await testNotifiers();
     }
@@ -62,5 +69,6 @@ export async function main(): Promise<void> {
 
 main().catch((err) => {
   L.error(err);
+  logVersionOnError();
   exit(1);
 });

@@ -2,6 +2,7 @@
 import { TOTP } from 'otpauth';
 import { Logger } from 'pino';
 import { Protocol, ElementHandle, Page } from 'puppeteer';
+import path from 'path';
 import logger from '../common/logger';
 import puppeteer, {
   getDevtoolsUrl,
@@ -13,7 +14,7 @@ import { getHcaptchaCookies } from './hcaptcha';
 import { EPIC_CLIENT_ID, STORE_HOMEPAGE_EN } from '../common/constants';
 import { NotificationReason } from '../interfaces/notification-reason';
 import { sendNotification } from '../notify';
-import { config } from '../common/config';
+import { config, CONFIG_DIR } from '../common/config';
 import { getLocaltunnelUrl } from '../common/localtunnel';
 
 const NOTIFICATION_TIMEOUT = config.notificationTimeoutHours * 60 * 60 * 1000;
@@ -71,21 +72,36 @@ export default class PuppetLogin {
     this.L.debug('Logging in with puppeteer');
     const browser = await puppeteer.launch(launchArgs);
     const page = await browser.newPage();
-    this.L.trace(getDevtoolsUrl(page));
-    const cdpClient = await page.target().createCDPSession();
-    await cdpClient.send('Network.setCookies', {
-      cookies: [...puppeteerCookies, ...hCaptchaCookies],
-    });
-    await page.setCookie(...puppeteerCookies, ...hCaptchaCookies);
-    await this.startLogin(page);
+    try {
+      this.L.trace(getDevtoolsUrl(page));
+      const cdpClient = await page.target().createCDPSession();
+      await cdpClient.send('Network.setCookies', {
+        cookies: [...puppeteerCookies, ...hCaptchaCookies],
+      });
+      await page.setCookie(...puppeteerCookies, ...hCaptchaCookies);
+      await this.startLogin(page);
 
-    this.L.trace('Saving new cookies');
-    const currentUrlCookies = (await cdpClient.send('Network.getAllCookies')) as {
-      cookies: Protocol.Network.Cookie[];
-    };
-    setPuppeteerCookies(this.email, currentUrlCookies.cookies);
-    this.L.trace('Saved cookies, closing browser');
-    await browser.close();
+      this.L.trace('Saving new cookies');
+      const currentUrlCookies = (await cdpClient.send('Network.getAllCookies')) as {
+        cookies: Protocol.Network.Cookie[];
+      };
+      setPuppeteerCookies(this.email, currentUrlCookies.cookies);
+      this.L.trace('Saved cookies, closing browser');
+      await browser.close();
+    } catch (err) {
+      if (page) {
+        const errorFile = `error-${new Date().toISOString()}.png`;
+        await page.screenshot({
+          path: path.join(CONFIG_DIR, `error-${errorFile}.png`),
+        });
+        this.L.error(
+          { errorFile },
+          'Encountered an error during browser automation. Saved a screenshot for debugging purposes.'
+        );
+      }
+      if (browser) await browser.close();
+      throw err;
+    }
   }
 
   private async waitForHCaptcha(page: Page): Promise<'captcha' | 'nav'> {
