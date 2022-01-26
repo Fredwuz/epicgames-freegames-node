@@ -51,12 +51,30 @@ The config file is stored in the mounted `/usr/app/config` volume and can be nam
     {
       "type": "discord",
       "webhookUrl": "https://discord.com/api/webhooks/123456789123456789/A-abcdefghijklmn-abcdefghijklmnopqrst12345678-abcdefghijklmnop123456",
+      // Optional list of users or roles to mention
+      "mentionedUsers": ["914360712086843432"],
+      "mentionedRoles": ["734548250895319070"],
     },
     {
       "type": "telegram",
       "token": "644739147:AAGMPo-Jz3mKRnHRTnrPEDi7jUF1vqNOD5k",
       "chatId": "-987654321",
-    }
+    },
+    {
+      "type": "apprise",
+      "apiUrl": "http://192.168.1.2:8000",
+      "urls": "mailto://user:pass@gmail.com",
+    },
+    {
+      "type": "pushover",
+      "token": "a172fyyl9gw99p2xi16tq8hnib48p2",
+      "userKey": "uvgidym7l5ggpwu2r8i1oy6diaapll",
+    },
+    {
+      "type": "gotify",
+      "apiUrl": "https://gotify.net",
+      "token": "SnL-wAvmfo_QT",
+    },
   ],
 }
 ```
@@ -83,7 +101,7 @@ hCaptcha offers an accessibility tool for vision impaired users that can be used
 
 For whatever reason, if your IP/account loses trust with hCaptcha, this project can notify and have you manually solve a captcha. To use this requires:
 
-* Access to one of the [notification methods](https://claabs.github.io/epicgames-freegames-node/classes/AppConfig.html#notifiers) (Discord, Telegram, email, etc.)
+* Access to one of the [notification methods](https://claabs.github.io/epicgames-freegames-node/classes/AppConfig.html#notifiers) (Discord, Telegram, email, Apprise, Pushover, etc.)
 * Configuring the captcha solving page webserver
   * Either via local IP or reverse proxy/port forwarding (if you don't know what this means, use the next option)
   * Or by using [localtunnel](https://localtunnel.me) to very easily remotely tunnel the webserver
@@ -172,17 +190,21 @@ If for whatever reason you want to change the default config directory or config
 |-----------------|--------------------|------|-------------------------------------------|
 | `/my/host/dir/` | `/usr/app/config`  | `rw` | Location of the config and cookie file(s) |
 
+#### Memory Limit
+
+It's recommended to add `-m 2g` as a `docker run` parameter to set a max memory usage of 2GB. The Chromium processes can sometimes run away, and without a limit your system will eventually lock up.
+
 ### Docker Run
 
 #### With JSON Config
 
-`$ docker run -d -v /my/host/dir/:/usr/app/config:rw -p 3000:3000 charlocharlie/epicgames-freegames:latest`
+`$ docker run -d -v /my/host/dir/:/usr/app/config:rw -p 3000:3000 -m 2g charlocharlie/epicgames-freegames:latest`
 
 #### Without JSON Config
 
 Without JSON config, you can only configure one account.
 
-`$ docker run -d -e TZ=America/Chicago -e EMAIL=example@gmail.com -e PASSWORD=abc123 -e TOTP=ABC123 -e RUN_ON_STARTUP=true -e BASE_URL=https://example.com -e SMTP_HOST=smtp.gmail.com -e SMTP_PORT=587 -e SMTP_HOST=smtp.gmail.com -e EMAIL_SENDER_ADDRESS=hello@gmail.com -e EMAIL_SENDER_NAME="Epic Games Captchas" -e EMAIL_RECIPIENT_ADDRESS=hello@gmail.com -e SMTP_SECURE=true -e SMTP_USERNAME=hello@gmail.com -e SMTP_PASSWORD=abc123 -v /my/host/dir/:/usr/app/config:rw -p 3000:3000 charlocharlie/epicgames-freegames:latest`
+`$ docker run -d -e TZ=America/Chicago -e EMAIL=example@gmail.com -e PASSWORD=abc123 -e TOTP=ABC123 -e RUN_ON_STARTUP=true -e BASE_URL=https://example.com -e SMTP_HOST=smtp.gmail.com -e SMTP_PORT=587 -e SMTP_HOST=smtp.gmail.com -e EMAIL_SENDER_ADDRESS=hello@gmail.com -e EMAIL_SENDER_NAME="Epic Games Captchas" -e EMAIL_RECIPIENT_ADDRESS=hello@gmail.com -e SMTP_SECURE=true -e SMTP_USERNAME=hello@gmail.com -e SMTP_PASSWORD=abc123 -v /my/host/dir/:/usr/app/config:rw -p 3000:3000 -m 2g charlocharlie/epicgames-freegames:latest`
 
 ### Cookie Import
 

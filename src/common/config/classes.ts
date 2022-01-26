@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-empty-function, no-useless-constructor, max-classes-per-file */
 import 'reflect-metadata';
-import { Type } from 'class-transformer';
+import { ClassConstructor, Type } from 'class-transformer';
 import {
   IsEmail,
   IsUrl,
@@ -28,7 +28,10 @@ export enum NotificationType {
   EMAIL = 'email',
   TELEGRAM = 'telegram',
   DISCORD = 'discord',
+  PUSHOVER = 'pushover',
+  APPRISE = 'apprise',
   LOCAL = 'local',
+  GOTIFY = 'gotify',
 }
 
 /**
@@ -56,6 +59,40 @@ export class LocalConfig extends NotifierConfig {
 }
 
 /**
+ * Sends a notification to many services via [Apprise API](https://github.com/caronc/apprise-api).
+ * Supports 70+ different [notification services](https://github.com/caronc/apprise/wiki#notification-services).
+ */
+export class AppriseConfig extends NotifierConfig {
+  /**
+   * The base URL of your Apprise instance
+   * @example http://localhost:8000
+   * @env APPRISE_API
+   */
+  @IsUrl({
+    require_tld: false,
+  })
+  apiUrl: string;
+
+  /**
+   * One or more URLs identifying where the notification should be sent to.
+   * If this field isn't specified then it automatically assumes the settings.APPRISE_STATELESS_URLS in your Apprise instance.
+   * More details: https://github.com/caronc/apprise-api#stateless-solution
+   * @example mailto://user:pass@gmail.com
+   * @env APPRISE_URLS
+   */
+  @IsString()
+  @IsOptional()
+  urls?: string;
+
+  /**
+   * @ignore
+   */
+  constructor() {
+    super(NotificationType.APPRISE);
+  }
+}
+
+/**
  * Sends a message to a server text channel using a webhook
  */
 export class DiscordConfig extends NotifierConfig {
@@ -70,10 +107,59 @@ export class DiscordConfig extends NotifierConfig {
   webhookUrl: string;
 
   /**
+   * A list of Discord user IDs to ping when posting the message. The IDs must be strings wrapped in quotes.
+   * How to get a user ID: https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID-
+   * @example ["914360712086843432", "914360712086843433"]
+   * @env DISCORD_MENTIONED_USERS (comma separated)
+   */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedUsers: string[];
+
+  /**
+   * A list of Discord role IDs to ping when posting the message. The IDs must be strings wrapped in quotes.
+   * To get a role ID: enable developer mode > right click a role > "Copy ID"
+   * @example ["734548250895319070", "734548250895319071"]
+   * @env DISCORD_MENTIONED_ROLES (comma separated)
+   */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedRoles: string[];
+
+  /**
    * @ignore
    */
   constructor() {
     super(NotificationType.DISCORD);
+  }
+}
+
+/**
+ * Sends a pushover message
+ */
+export class PushoverConfig extends NotifierConfig {
+  /**
+   * Guide: https://pushover.net/apps/build
+   * @example a172fyyl9gw99p2xi16tq8hnib48p2
+   * @env PUSHOVER_TOKEN
+   */
+  @IsString()
+  token: string;
+
+  /**
+   * @example uvgidym7l5ggpwu2r8i1oy6diaapll
+   * @env PUSHOVER_USER_ID
+   */
+  @IsString()
+  userKey: string;
+
+  /**
+   * @ignore
+   */
+  constructor() {
+    super(NotificationType.PUSHOVER);
   }
 }
 
@@ -105,6 +191,49 @@ export class TelegramConfig extends NotifierConfig {
    */
   constructor() {
     super(NotificationType.TELEGRAM);
+  }
+}
+
+/**
+ * Sends a message to a self-hosted [Gotify](https://gotify.net/) server
+ */
+export class GotifyConfig extends NotifierConfig {
+  /**
+   * The Gotify server host URL
+   * @example http://gotify.net
+   * @env GOTIFY_API_URL
+   */
+  @IsUrl({
+    require_tld: false,
+  })
+  apiUrl: string;
+
+  /**
+   * On the Gotify web UI, Apps > Create Application > reveal the token
+   * @example SnL-wAvmfo_QT
+   * @env GOTIFY_TOKEN
+   */
+  @IsNotEmpty()
+  @IsString()
+  token: string;
+
+  /**
+   * The priority level sent with the message.
+   * @example 7
+   * @default 5
+   * @env GOTIFY_PRIORITY
+   */
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  @IsOptional()
+  priority = 5;
+
+  /**
+   * @ignore
+   */
+  constructor() {
+    super(NotificationType.GOTIFY);
   }
 }
 
@@ -206,20 +335,27 @@ export class EmailConfig extends NotifierConfig {
   }
 }
 
-export class NotificationConfig {
-  /**
-   * Settings for basic SMTP server email notifications
-   */
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => EmailConfig)
-  email?: EmailConfig;
+export type AnyNotifierConfig =
+  | EmailConfig
+  | DiscordConfig
+  | LocalConfig
+  | TelegramConfig
+  | AppriseConfig
+  | PushoverConfig
+  | GotifyConfig;
 
-  /**
-   * @ignore
-   */
-  constructor() {}
-}
+const notifierSubtypes: {
+  value: ClassConstructor<NotifierConfig>;
+  name: string;
+}[] = [
+  { value: EmailConfig, name: NotificationType.EMAIL },
+  { value: DiscordConfig, name: NotificationType.DISCORD },
+  { value: PushoverConfig, name: NotificationType.PUSHOVER },
+  { value: LocalConfig, name: NotificationType.LOCAL },
+  { value: TelegramConfig, name: NotificationType.TELEGRAM },
+  { value: AppriseConfig, name: NotificationType.APPRISE },
+  { value: GotifyConfig, name: NotificationType.GOTIFY },
+];
 
 export class WebPortalConfig {
   /**
@@ -305,15 +441,10 @@ export class AccountConfig {
   @Type(() => NotifierConfig, {
     discriminator: {
       property: 'type',
-      subTypes: [
-        { value: EmailConfig, name: NotificationType.EMAIL },
-        { value: DiscordConfig, name: NotificationType.DISCORD },
-        { value: LocalConfig, name: NotificationType.LOCAL },
-        { value: TelegramConfig, name: NotificationType.TELEGRAM },
-      ],
+      subTypes: notifierSubtypes,
     },
   })
-  notifiers?: (EmailConfig | DiscordConfig | LocalConfig | TelegramConfig)[];
+  notifiers?: AnyNotifierConfig[];
 
   /**
    * @ignore
@@ -389,7 +520,12 @@ export enum LogLevel {
  *        "type": "telegram",
  *        "token": "644739147:AAGMPo-Jz3mKRnHRTnrPEDi7jUF1vqNOD5k",
  *        "chatId": "-987654321",
- *      }
+ *      },
+ *      {
+ *        "type": "apprise",
+ *        "apiUrl": "http://192.168.1.2:8000",
+ *        "urls": "mailto://user:pass@gmail.com",
+ *      },
  *    ],
  * }
  * ```
@@ -487,13 +623,13 @@ export class AppConfig {
 
   /**
    * Default to purchasing games using browser automation
-   * @example true
-   * @default false
+   * @example false
+   * @default true
    * @env PUPPETEER_PURCHASE
    */
   @IsOptional()
   @IsBoolean()
-  puppeteerPurchase = process.env.PUPPETEER_PURCHASE?.toLowerCase() === 'true' || false;
+  puppeteerPurchase = process.env.PUPPETEER_PURCHASE?.toLowerCase() !== 'false';
 
   /**
    * A list of accounts to work with
@@ -515,15 +651,10 @@ export class AppConfig {
   @Type(() => NotifierConfig, {
     discriminator: {
       property: 'type',
-      subTypes: [
-        { value: EmailConfig, name: NotificationType.EMAIL },
-        { value: DiscordConfig, name: NotificationType.DISCORD },
-        { value: LocalConfig, name: NotificationType.LOCAL },
-        { value: TelegramConfig, name: NotificationType.TELEGRAM },
-      ],
+      subTypes: notifierSubtypes,
     },
   })
-  notifiers?: (EmailConfig | DiscordConfig | LocalConfig | TelegramConfig)[];
+  notifiers?: AnyNotifierConfig[];
 
   /**
    * Number of hours to wait for a response for a notification.
@@ -654,15 +785,31 @@ export class AppConfig {
     }
 
     // Use environment variables to fill discord notification config if present
-    const { DISCORD_WEBHOOK } = process.env;
+    const { DISCORD_WEBHOOK, DISCORD_MENTIONED_USERS, DISCORD_MENTIONED_ROLES } = process.env;
     if (DISCORD_WEBHOOK) {
       const discord = new DiscordConfig();
       discord.webhookUrl = DISCORD_WEBHOOK;
+      if (DISCORD_MENTIONED_USERS) discord.mentionedUsers = DISCORD_MENTIONED_USERS.split(',');
+      if (DISCORD_MENTIONED_ROLES) discord.mentionedRoles = DISCORD_MENTIONED_ROLES.split(',');
       if (!this.notifiers) {
         this.notifiers = [];
       }
       if (!this.notifiers.some((notifConfig) => notifConfig instanceof DiscordConfig)) {
         this.notifiers.push(discord);
+      }
+    }
+
+    // Use environment variables to fill pushover notification config if present
+    const { PUSHOVER_TOKEN, PUSHOVER_USER_ID } = process.env;
+    if (PUSHOVER_TOKEN && PUSHOVER_USER_ID) {
+      const pushover = new PushoverConfig();
+      pushover.token = PUSHOVER_TOKEN;
+      pushover.userKey = PUSHOVER_USER_ID;
+      if (!this.notifiers) {
+        this.notifiers = [];
+      }
+      if (!this.notifiers.some((notifConfig) => notifConfig instanceof PushoverConfig)) {
+        this.notifiers.push(pushover);
       }
     }
 
@@ -677,6 +824,35 @@ export class AppConfig {
       }
       if (!this.notifiers.some((notifConfig) => notifConfig instanceof TelegramConfig)) {
         this.notifiers.push(telegram);
+      }
+    }
+
+    // Use environment variables to fill apprise notification config if present
+    const { APPRISE_API, APPRISE_URLS } = process.env;
+    if (APPRISE_API) {
+      const apprise = new AppriseConfig();
+      apprise.apiUrl = APPRISE_API;
+      apprise.urls = APPRISE_URLS;
+      if (!this.notifiers) {
+        this.notifiers = [];
+      }
+      if (!this.notifiers.some((notifConfig) => notifConfig instanceof AppriseConfig)) {
+        this.notifiers.push(apprise);
+      }
+    }
+
+    // Use environment variables to fill gotify notification config if present
+    const { GOTIFY_API_URL, GOTIFY_TOKEN, GOTIFY_PRIORITY } = process.env;
+    if (GOTIFY_API_URL && GOTIFY_TOKEN) {
+      const gotify = new GotifyConfig();
+      gotify.apiUrl = GOTIFY_API_URL;
+      gotify.token = GOTIFY_TOKEN;
+      if (GOTIFY_PRIORITY) gotify.priority = parseInt(GOTIFY_PRIORITY, 10);
+      if (!this.notifiers) {
+        this.notifiers = [];
+      }
+      if (!this.notifiers.some((notifConfig) => notifConfig instanceof GotifyConfig)) {
+        this.notifiers.push(gotify);
       }
     }
 

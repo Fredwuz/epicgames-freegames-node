@@ -57,7 +57,7 @@ export default class FreeGames {
     const extensions = {
       persistedQuery: {
         version: 1,
-        sha256Hash: '0304d711e653a2914f3213a6d9163cc17153c60aef0ef52279731b02779231d2',
+        sha256Hash: '6e7c4dd0177150eb9a47d624be221929582df8648e7ec271c821838ff4ee148e',
       },
     };
     this.L.trace(
@@ -175,12 +175,14 @@ export default class FreeGames {
             ];
           }
           const productOffers = await this.getProduct(game.productSlug);
-          return productOffers.map((o) => ({
-            offerNamespace: o.namespace,
-            offerId: o.id,
-            productName: game.title,
-            productSlug: game.productSlug,
-          }));
+          return productOffers
+            .filter((o) => o.hasOffer)
+            .map((o) => ({
+              offerNamespace: o.namespace,
+              offerId: o.id,
+              productName: game.title,
+              productSlug: game.productSlug,
+            }));
         })
       )
     ).flat();
@@ -231,7 +233,7 @@ export default class FreeGames {
     if (entitlementResp.body.errors && entitlementResp.body.errors[0]) {
       const error = entitlementResp.body.errors[0];
       const errorJSON: AuthErrorJSON = JSON.parse(error.serviceResponse);
-      if (errorJSON.errorCode.includes('authentication_failed')) {
+      if (errorJSON.errorCode?.includes('authentication_failed')) {
         this.L.warn('Failed to authenticate with GraphQL API, trying again');
         const login = new Login(this.request, this.email);
         await login.refreshAndSid(true);

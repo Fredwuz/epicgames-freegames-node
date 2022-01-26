@@ -1,8 +1,12 @@
 import puppeteer from 'puppeteer-extra';
-import { Page, Protocol } from 'puppeteer';
+import { Page, Protocol, Browser } from 'puppeteer';
 import PortalPlugin, { WebPortalConnectionConfig } from 'puppeteer-extra-plugin-portal';
 import objectAssignDeep from 'object-assign-deep';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import { Logger } from 'pino';
+import { cancelable } from 'cancelable-promise';
+import pidtree from 'pidtree';
+import findProcess from 'find-process';
 import { ToughCookieFileStore } from './request';
 import { config } from './config';
 
@@ -105,4 +109,61 @@ export const launchArgs: Parameters<typeof puppeteer.launch>[0] = {
     // '--remote-debugging-port=3001',
     // '--remote-debugging-address=0.0.0.0', // Change devtools url to localhost
   ],
+};
+
+/**
+ * This is a hacky solution to retry a function if it doesn't return within a timeout.
+ */
+const retryFunction = async <T>(
+  f: () => Promise<T>,
+  L: Logger,
+  outputName: string,
+  attempts = 0
+): Promise<T> => {
+  const TIMEOUT = 15 * 1000;
+  const MAX_ATTEMPTS = 5;
+  const beforeProcesses = await pidtree(process.pid);
+  const newPageCancelable = cancelable(f());
+  const res = await Promise.race([
+    newPageCancelable,
+    // eslint-disable-next-line no-promise-executor-return
+    new Promise((resolve) => setTimeout(resolve, TIMEOUT)).then(() => 'timeout'),
+  ]);
+  if (typeof res !== 'string') {
+    return res;
+  }
+  newPageCancelable.cancel();
+  const afterProcesses = await pidtree(process.pid);
+  const newProcesses = await Promise.all(
+    afterProcesses
+      .filter((p) => !beforeProcesses.includes(p))
+      .map(async (p) => (await findProcess('pid', p))[0])
+  );
+  const chromiumProcesses = newProcesses.filter(
+    (p) =>
+      p !== undefined && ['chromium', 'chrome', 'headless_shell'].some((n) => p.name.includes(n))
+  );
+  L.debug({ chromiumProcesses }, 'Killing new browser processes spawned');
+  chromiumProcesses.forEach((p) => process.kill(p.pid));
+  if (attempts > MAX_ATTEMPTS)
+    throw new Error(`Could not do ${outputName} after ${MAX_ATTEMPTS} attempts.`);
+  L.warn(
+    { attempts, MAX_ATTEMPTS },
+    `${outputName} did not work after ${TIMEOUT}ms. Trying again.`
+  );
+  return retryFunction(f, L, outputName, attempts + 1);
+};
+
+/**
+ * Create a new page within a wrapper that will retry if it hangs for 30 seconds
+ */
+export const safeNewPage = (browser: Browser, L: Logger): Promise<Page> => {
+  return retryFunction(() => browser.newPage(), L, 'new page');
+};
+
+/**
+ * Launcha new browser within a wrapper that will retry if it hangs for 30 seconds
+ */
+export const safeLaunchBrowser = (L: Logger): Promise<Browser> => {
+  return retryFunction(() => puppeteer.launch(launchArgs), L, 'browser launch');
 };

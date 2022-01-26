@@ -1,4 +1,11 @@
-import { DiscordNotifier, EmailNotifier, LocalNotifier, TelegramNotifier } from './notifiers';
+import {
+  AppriseNotifier,
+  DiscordNotifier,
+  EmailNotifier,
+  LocalNotifier,
+  TelegramNotifier,
+  GotifyNotifier,
+} from './notifiers';
 import {
   config,
   DiscordConfig,
@@ -6,11 +13,15 @@ import {
   LocalConfig,
   NotificationType,
   TelegramConfig,
+  AppriseConfig,
+  PushoverConfig,
+  GotifyConfig,
 } from './common/config';
 import L from './common/logger';
 import { NotificationReason } from './interfaces/notification-reason';
-import puppeteer, { getDevtoolsUrl, launchArgs } from './common/puppeteer';
+import { getDevtoolsUrl, safeLaunchBrowser, safeNewPage } from './common/puppeteer';
 import { getLocaltunnelUrl } from './common/localtunnel';
+import { PushoverNotifier } from './notifiers/pushover';
 
 export async function sendNotification(
   url: string,
@@ -34,12 +45,18 @@ export async function sendNotification(
     switch (notifierConfig.type) {
       case NotificationType.DISCORD:
         return new DiscordNotifier(notifierConfig as DiscordConfig);
+      case NotificationType.PUSHOVER:
+        return new PushoverNotifier(notifierConfig as PushoverConfig);
       case NotificationType.EMAIL:
         return new EmailNotifier(notifierConfig as EmailConfig);
       case NotificationType.LOCAL:
         return new LocalNotifier(notifierConfig as LocalConfig);
       case NotificationType.TELEGRAM:
         return new TelegramNotifier(notifierConfig as TelegramConfig);
+      case NotificationType.APPRISE:
+        return new AppriseNotifier(notifierConfig as AppriseConfig);
+      case NotificationType.GOTIFY:
+        return new GotifyNotifier(notifierConfig as GotifyConfig);
       default:
         throw new Error(`Unexpected notifier config: ${notifierConfig.type}`);
     }
@@ -52,8 +69,8 @@ export async function sendNotification(
 
 export async function testNotifiers(): Promise<void> {
   L.info('Testing all configured notifiers');
-  const browser = await puppeteer.launch(launchArgs);
-  const page = await browser.newPage();
+  const browser = await safeLaunchBrowser(L);
+  const page = await safeNewPage(browser, L);
   L.trace(getDevtoolsUrl(page));
   await page.goto('https://claabs.github.io/epicgames-freegames-node/test.html');
   let url = await page.openPortal();

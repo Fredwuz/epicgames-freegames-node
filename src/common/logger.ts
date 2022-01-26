@@ -2,11 +2,19 @@ import pino from 'pino';
 import { config } from './config';
 
 const logger = pino({
-  prettyPrint: {
-    translateTime: `SYS:standard`,
+  transport: {
+    target: 'pino-pretty',
+    options: {
+      translateTime: `SYS:standard`,
+    },
   },
-  useLevelLabels: true,
+  formatters: {
+    level: (label) => {
+      return { level: label };
+    },
+  },
   level: config.logLevel,
+  base: undefined,
 });
 
 export default logger;
